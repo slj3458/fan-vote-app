@@ -1,0 +1,94 @@
+.sortable-item {
+  display: flex;
+  align-items: center;
+  padding: 15px;
+  margin-bottom: 10px;
+  background-color: #fff;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  cursor: grab;
+  user-select: none;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.sortable-item:hover {
+  border-color: #1976d2;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.sortable-item:active {
+  cursor: grabbing;
+}
+
+.sortable-item.dragging {
+  z-index: 999;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  border-color: #1976d2;
+  background-color: #e3f2fd;
+}
+
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  color: #999;
+  flex-shrink: 0;
+}
+
+.sortable-item:hover .drag-handle {
+  color: #1976d2;
+}
+
+.item-rank {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #1976d2;
+  color: white;
+  border-radius: 50%;
+  font-weight: bold;
+  font-size: 16px;
+  margin-right: 15px;
+}
+
+.item-name {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+/* Mobile responsive */
+@media (max-width: 600px) {
+  .sortable-item {
+    padding: 12px;
+  }
+
+  .item-rank {
+    width: 35px;
+    height: 35px;
+    font-size: 14px;
+    margin-right: 12px;
+  }
+
+  .item-name {
+    font-size: 14px;
+  }
+
+  .drag-handle {
+    margin-right: 8px;
+  }
+}
+
+/* Touch device optimization */
+@media (hover: none) and (pointer: coarse) {
+  .sortable-item {
+    padding: 18px;
+    margin-bottom: 12px;
+  }
+}

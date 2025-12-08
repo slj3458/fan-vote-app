@@ -1,0 +1,210 @@
+.my-rankings {
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.rankings-header {
+  margin-bottom: 20px;
+}
+
+.rankings-header h2 {
+  margin-top: 0;
+  color: #333;
+  font-size: 24px;
+}
+
+.instructions {
+  color: #666;
+  font-size: 14px;
+  margin-top: 8px;
+  padding: 12px;
+  background-color: #e3f2fd;
+  border-radius: 4px;
+  border-left: 4px solid #1976d2;
+}
+
+.rankings-list {
+  margin-bottom: 30px;
+}
+
+.submit-section {
+  text-align: center;
+  padding: 20px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+.verification-status {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.status-item.verified {
+  color: #4caf50;
+}
+
+.status-item.pending {
+  color: #999;
+}
+
+.status-icon {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.verify-button {
+  padding: 12px 30px;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  background-color: #4caf50;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.1s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  margin-bottom: 15px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.verify-button:hover:not(:disabled) {
+  background-color: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.verify-button:disabled {
+  background-color: #bdbdbd;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.submit-button {
+  padding: 15px 40px;
+  font-size: 18px;
+  font-weight: 600;
+  color: white;
+  background-color: #1976d2;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.1s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.submit-button:hover:not(:disabled) {
+  background-color: #1565c0;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.submit-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.submit-button:disabled {
+  background-color: #bdbdbd;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.submit-info {
+  margin-top: 12px;
+  color: #666;
+  font-size: 14px;
+}
+
+.submission-confirmation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.confirmation-icon {
+  width: 80px;
+  height: 80px;
+  background-color: #4caf50;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  margin-bottom: 20px;
+  animation: scaleIn 0.3s ease-out;
+}
+
+@keyframes scaleIn {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.submission-confirmation h2 {
+  color: #333;
+  margin: 0 0 10px 0;
+}
+
+.submission-confirmation p {
+  color: #666;
+  font-size: 16px;
+}
+
+.no-data {
+  padding: 40px;
+  text-align: center;
+  color: #999;
+  font-size: 18px;
+}
+
+/* Mobile responsive */
+@media (max-width: 600px) {
+  .my-rankings {
+    padding: 10px;
+  }
+
+  .rankings-header h2 {
+    font-size: 20px;
+  }
+
+  .instructions {
+    font-size: 13px;
+  }
+
+  .submit-button {
+    padding: 12px 30px;
+    font-size: 16px;
+    width: 100%;
+  }
+
+  .confirmation-icon {
+    width: 60px;
+    height: 60px;
+    font-size: 36px;
+  }
+}
