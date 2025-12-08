@@ -7,6 +7,7 @@ A Progressive Web App (PWA) for live performance ranking at musical ensemble con
 - **Frontend**: React 19 with Vite 7
 - **Database**: Firebase Firestore
 - **Authentication**: Firebase Anonymous Auth
+- **Attendance Verification**: GGWave (data-over-sound)
 - **Real-time Messaging**: MQTT.js for contest status updates
 - **Drag-and-Drop**: @dnd-kit/core and @dnd-kit/sortable
 - **PWA**: vite-plugin-pwa with Workbox
@@ -27,8 +28,8 @@ fan-vote-app/
 │   │   └── SortableItem.css
 │   ├── hooks/
 │   │   └── useContest.js        # Custom hook for Firestore contest data
-│   ├── utils/
-│   │   └── geolocation.js       # Capacitor geolocation utilities
+│   ├── services/
+│   │   └── ggwave.js            # Audio-based attendance verification
 │   ├── App.jsx                  # Main app with tabs and auth
 │   ├── App.css
 │   ├── firebase.js              # Firebase configuration and auth helpers
@@ -45,6 +46,31 @@ fan-vote-app/
 ```
 
 ## Key Concepts
+
+### Attendance Verification (GGWave)
+
+The app uses [ggwave](https://github.com/ggerganov/ggwave) data-over-sound technology to verify user attendance at venues. The PA system broadcasts an encoded audio signal that the app decodes via the device microphone.
+
+**How it works:**
+1. User taps "Verify My Attendance"
+2. App requests microphone permission
+3. App listens for authentication signal (30 second timeout)
+4. PA system broadcasts encoded message: `FANVOTE:<contest_id>:AUTH:<timestamp>`
+5. App decodes and validates the message
+6. Attendance is verified, enabling ranking submission
+
+**Authentication Code Format:**
+```
+FANVOTE:1:AUTH:1703548800
+```
+- `FANVOTE` - Protocol prefix
+- `1` - Contest ID
+- `AUTH` - Code type (authentication)
+- `1703548800` - Unix timestamp (must be within 5 minutes)
+
+**Key files:**
+- `src/services/ggwave.js` - Audio capture, decoding, and validation
+- `src/components/MyRankings.jsx` - UI integration
 
 ### Contest Data Model (Firestore)
 
@@ -89,8 +115,11 @@ fan-vote-app/
 2. Contest data loads from Firestore via `useContest` hook
 3. **Contest Lineup tab**: Shows ensembles in performance order with times
 4. **My Rankings tab**: User drags/drops ensembles to rank by preference
-5. Submit button is disabled until contest concludes (signaled via MQTT)
-6. Rankings are saved to Firestore with user's anonymous UID
+5. User taps "Verify My Attendance" → listens for PA audio signal
+6. Submit button is disabled until BOTH:
+   - Attendance is verified (via ggwave audio)
+   - Contest has concluded (signaled via MQTT)
+7. Rankings are saved to Firestore with user's anonymous UID
 
 ### MQTT Integration
 
@@ -154,9 +183,41 @@ const MQTT_CONFIG = {
 
 ## Testing Notes
 
-- For local testing without MQTT, manually set `contestConcluded` state to `true` in `App.jsx`
+- **Attendance verification**: For local testing, you can temporarily set `attendanceVerified` to `true` in `MyRankings.jsx`
+- **Contest conclusion**: For local testing without MQTT, manually set `contestConcluded` state to `true` in `App.jsx`
+- **Audio testing**: Use the [ggwave web demo](https://ggwave.ggerganov.com/) to generate test signals
 - Firebase Anonymous Auth works locally but requires proper domain configuration for production
 - PWA features (install prompt, offline support) only work on HTTPS or localhost
+- Microphone access requires HTTPS in production (localhost is exempt)
+
+## Venue Setup (PA System)
+
+To broadcast authentication codes from the venue PA system:
+
+1. Use a device/computer connected to the PA audio input
+2. Generate authentication codes using ggwave encode function
+3. Broadcast at the start of the event and periodically throughout
+4. Code format: `FANVOTE:<contest_id>:AUTH:<unix_timestamp>`
+
+Example code generation (Node.js):
+```javascript
+const ggwave = require('ggwave');
+
+ggwave().then((gw) => {
+  const params = gw.getDefaultParameters();
+  const instance = gw.init(params);
+
+  const contestId = 1;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const message = `FANVOTE:${contestId}:AUTH:${timestamp}`;
+
+  // Generate waveform (audible protocol, volume 10)
+  const waveform = gw.encode(instance, message, gw.TxProtocolId.GGWAVE_TX_PROTOCOL_AUDIBLE_FAST, 10);
+
+  // waveform is Int8Array of audio samples at 48kHz
+  // Play through PA system audio output
+});
+```
 
 ## Common Tasks
 
@@ -167,6 +228,12 @@ const MQTT_CONFIG = {
 
 ### Change ranking submission logic
 - Modify `handleSubmitRankings` function in `App.jsx`
+
+### Modify authentication code validation
+- Edit `validateAuthCode` function in `src/services/ggwave.js`
+
+### Change listening timeout
+- Modify `timeoutMs` parameter in `handleVerifyAttendance` in `MyRankings.jsx` (default: 30000ms)
 
 ### Update PWA configuration
 - Edit `vite.config.js` under the `VitePWA` plugin options
@@ -183,3 +250,5 @@ npx cap open android  # Opens Android Studio
 - Firebase API keys in `src/firebase.js` are client-side keys (safe to expose)
 - Actual security is handled by Firestore Security Rules (configure in Firebase Console)
 - Anonymous users can only write to `rankings` collection, not modify `contests`
+- Authentication codes expire after 5 minutes to prevent replay attacks
+- Audio authentication requires physical presence at the venue (can hear the PA)
