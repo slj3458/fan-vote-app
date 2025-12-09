@@ -6,6 +6,7 @@ A Progressive Web App (PWA) for live performance ranking at musical ensemble con
 
 - **Contest Lineup Tab**: View ensembles in performance order with start times
 - **My Rankings Tab**: Drag-and-drop interface to rank performers by preference
+- **Audio Attendance Verification**: Uses GGWave data-over-sound technology to verify users are physically at the venue
 - **Anonymous Authentication**: Each user gets a unique ID via Firebase Anonymous Auth
 - **Real-time Updates**: MQTT integration for contest status (submit button enabled when contest concludes)
 - **Progressive Web App**: Installable on mobile devices (iOS & Android)
@@ -203,6 +204,8 @@ performance-ranking-app/
 │   │   └── SortableItem.css
 │   ├── hooks/
 │   │   └── useContest.js      # Custom hook for Firestore data
+│   ├── services/
+│   │   └── ggwave.js          # Audio-based attendance verification
 │   ├── App.jsx                # Main app component
 │   ├── App.css
 │   ├── firebase.js            # Firebase configuration
@@ -219,9 +222,11 @@ performance-ranking-app/
 - **Vite** - Build tool and dev server
 - **Firebase Firestore** - NoSQL database for contests and rankings
 - **Firebase Auth** - Anonymous authentication
+- **GGWave** - Data-over-sound library for attendance verification
 - **MQTT.js** - Real-time messaging for contest status
 - **@dnd-kit** - Drag-and-drop functionality
 - **vite-plugin-pwa** - Progressive Web App support
+- **Capacitor** - Native mobile app wrapper (Android)
 
 ## How It Works
 
@@ -231,11 +236,17 @@ performance-ranking-app/
 4. **My Rankings Tab**:
    - Shows ensembles in reverse performance order
    - User can drag-and-drop to reorder by preference
-   - Submit button is disabled until contest concludes
-5. **Contest Conclusion**:
+   - Submit button is disabled until attendance verified AND contest concludes
+5. **Attendance Verification**:
+   - User taps "Verify My Attendance"
+   - App requests microphone permission
+   - PA system broadcasts encoded audio signal (using GGWave)
+   - App decodes and validates the authentication code
+   - Attendance is verified (valid for the session)
+6. **Contest Conclusion**:
    - MQTT message signals contest is over
-   - Submit button becomes enabled
-6. **Submit Rankings**:
+   - Submit button becomes enabled (if attendance already verified)
+7. **Submit Rankings**:
    - Rankings saved to Firestore `rankings` collection
    - User sees confirmation message
    - Anonymous user ID and contest ID are stored with rankings

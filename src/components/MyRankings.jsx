@@ -15,13 +15,13 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { SortableItem } from './SortableItem';
-import { LocationService } from '../utils/geolocation';
+import { authenticate, stopListening } from '../services/ggwave';
 import './MyRankings.css';
 
 /**
  * My Rankings Component
  * Displays a drag-and-drop reorderable list of ensembles
- * Includes location verification and contest conclusion checks
+ * Includes audio-based attendance verification and contest conclusion checks
  */
 const MyRankings = ({
   contest,
@@ -30,8 +30,9 @@ const MyRankings = ({
   hasSubmitted
 }) => {
   const [items, setItems] = useState([]);
-  const [locationVerified, setLocationVerified] = useState(false);
+  const [attendanceVerified, setAttendanceVerified] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationState, setVerificationState] = useState(null);
 
   // Initialize items in reverse performance order (last performer first)
   useEffect(() => {
@@ -46,6 +47,13 @@ const MyRankings = ({
       })));
     }
   }, [contest]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopListening();
+    };
+  }, []);
 
   // Set up sensors for drag-and-drop
   const sensors = useSensors(
@@ -77,62 +85,77 @@ const MyRankings = ({
     }
   };
 
-  const handleVerifyLocation = async () => {
+  const handleVerifyAttendance = async () => {
     setIsVerifying(true);
+    setVerificationState('initializing');
 
     try {
-      // Request permission if not granted
-      const hasPermission = await LocationService.requestLocationPermission();
+      const contestId = contest.id_contest || contest.id;
 
-      if (!hasPermission) {
-        setIsVerifying(false);
-        showPermissionDeniedDialog();
-        return;
-      }
-
-      // Verify location against venue
-      if (!contest.venue_location) {
-        alert('Venue location not configured for this contest');
-        setIsVerifying(false);
-        return;
-      }
-
-      const result = await LocationService.verifyEventPresence(
-        contest.venue_location,
-        200 // 200 yards radius
-      );
+      const result = await authenticate({
+        contestId,
+        timeoutMs: 30000, // 30 seconds
+        onStateChange: (state) => {
+          setVerificationState(state);
+        }
+      });
 
       setIsVerifying(false);
 
-      if (result.verified) {
-        setLocationVerified(true);
-        alert(`Location Verified! You are at the venue. You can now submit your rankings when the contest concludes.`);
-      } else if (result.reason === 'outside_radius') {
-        alert(`Location Verification Failed\n\nYou are ${result.distance.toFixed(0)} yards from the venue. You must be within 200 yards to submit rankings.`);
+      if (result.authenticated) {
+        setAttendanceVerified(true);
+        setVerificationState('verified');
+        alert('Attendance Verified! You can now submit your rankings when the contest concludes.');
       } else {
-        alert('Location Verification Failed\n\nUnable to verify your location. Please try again.');
+        setVerificationState('failed');
+        handleVerificationFailure(result.reason);
       }
     } catch (error) {
       setIsVerifying(false);
-      alert('Error: Failed to verify location. Please try again.');
+      setVerificationState('failed');
+      console.error('Verification error:', error);
+      alert('Error: Failed to verify attendance. Please try again.');
     }
+  };
+
+  const handleVerificationFailure = (reason) => {
+    switch (reason) {
+      case 'microphone_denied':
+        showPermissionDeniedDialog();
+        break;
+      case 'microphone_not_found':
+        alert('No microphone found. Please ensure your device has a working microphone and try again.');
+        break;
+      case 'timeout':
+        alert('Verification Timeout\n\nNo authentication signal was detected. Please make sure:\n\n• You are at the venue\n• The PA system is broadcasting\n• Your device volume is not muted');
+        break;
+      default:
+        alert('Attendance Verification Failed\n\nUnable to verify your attendance. Please try again.');
+    }
+  };
+
+  const handleCancelVerification = () => {
+    stopListening();
+    setIsVerifying(false);
+    setVerificationState(null);
   };
 
   const showPermissionDeniedDialog = () => {
     const retry = window.confirm(
-      "Location Permission Required\n\n" +
+      "Microphone Permission Required\n\n" +
       "We're sorry, this application was specifically designed to gather feedback from contest attendees. " +
-      "Without your location, we can't verify your attendance.\n\n" +
+      "Without microphone access, we can't verify your attendance at the venue.\n\n" +
+      "The microphone is only used briefly to listen for the venue's authentication signal.\n\n" +
       "Click OK to try again, or Cancel to exit."
     );
     if (retry) {
-      handleVerifyLocation();
+      handleVerifyAttendance();
     }
   };
 
   const handleSubmit = () => {
-    if (!locationVerified) {
-      alert('Please verify your location at the venue before submitting rankings.');
+    if (!attendanceVerified) {
+      alert('Please verify your attendance at the venue before submitting rankings.');
       return;
     }
     if (!contestConcluded) {
@@ -148,8 +171,27 @@ const MyRankings = ({
     onSubmitRankings(rankings);
   };
 
-  // Can only submit when both location is verified AND contest has concluded
-  const canSubmit = locationVerified && contestConcluded;
+  const getVerificationStateText = () => {
+    switch (verificationState) {
+      case 'initializing':
+        return 'Initializing audio...';
+      case 'requesting_permission':
+        return 'Requesting microphone access...';
+      case 'listening':
+        return 'Listening for authentication signal...';
+      case 'timeout':
+        return 'Verification timed out';
+      case 'verified':
+        return 'Attendance verified!';
+      case 'failed':
+        return 'Verification failed';
+      default:
+        return '';
+    }
+  };
+
+  // Can only submit when both attendance is verified AND contest has concluded
+  const canSubmit = attendanceVerified && contestConcluded;
 
   if (!contest || !contest.lineup) {
     return <div className="no-data">No contest data available</div>;
@@ -199,9 +241,9 @@ const MyRankings = ({
 
       <div className="submit-section">
         <div className="verification-status">
-          <div className={`status-item ${locationVerified ? 'verified' : 'pending'}`}>
-            <span className="status-icon">{locationVerified ? '✓' : '○'}</span>
-            <span className="status-text">Location Verified</span>
+          <div className={`status-item ${attendanceVerified ? 'verified' : 'pending'}`}>
+            <span className="status-icon">{attendanceVerified ? '✓' : '○'}</span>
+            <span className="status-text">Attendance Verified</span>
           </div>
           <div className={`status-item ${contestConcluded ? 'verified' : 'pending'}`}>
             <span className="status-icon">{contestConcluded ? '✓' : '○'}</span>
@@ -209,14 +251,28 @@ const MyRankings = ({
           </div>
         </div>
 
-        {!locationVerified && (
+        {!attendanceVerified && !isVerifying && (
           <button
             className="verify-button"
-            onClick={handleVerifyLocation}
-            disabled={isVerifying}
+            onClick={handleVerifyAttendance}
           >
-            {isVerifying ? 'Verifying Location...' : 'Verify My Location'}
+            Verify My Attendance
           </button>
+        )}
+
+        {isVerifying && (
+          <div className="verification-progress">
+            <div className="listening-indicator">
+              <span className="pulse"></span>
+              <span className="state-text">{getVerificationStateText()}</span>
+            </div>
+            <button
+              className="cancel-button"
+              onClick={handleCancelVerification}
+            >
+              Cancel
+            </button>
+          </div>
         )}
 
         <button
@@ -224,15 +280,15 @@ const MyRankings = ({
           onClick={handleSubmit}
           disabled={!canSubmit}
         >
-          {canSubmit ? 'Submit Rankings' : 'Location & Contest Verification Required'}
+          {canSubmit ? 'Submit Rankings' : 'Attendance & Contest Verification Required'}
         </button>
 
         {!canSubmit && (
           <p className="submit-info">
-            {!locationVerified && !contestConcluded
-              ? 'You must be at the venue and the contest must conclude before submitting.'
-              : !locationVerified
-              ? 'You must be at the venue to submit your rankings.'
+            {!attendanceVerified && !contestConcluded
+              ? 'You must verify your attendance and the contest must conclude before submitting.'
+              : !attendanceVerified
+              ? 'You must verify your attendance at the venue to submit your rankings.'
               : 'The submit button will be enabled when the contest concludes.'}
           </p>
         )}
