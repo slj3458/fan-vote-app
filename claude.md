@@ -20,6 +20,8 @@ A Progressive Web App (PWA) for live performance ranking at musical ensemble con
 fan-vote-app/
 ├── src/
 │   ├── components/
+│   │   ├── AdminScores.jsx      # Admin page for viewing calculated scores
+│   │   ├── AdminScores.css
 │   │   ├── ContestLineup.jsx    # Displays ensembles in performance order
 │   │   ├── ContestLineup.css
 │   │   ├── MyRankings.jsx       # Drag-and-drop ranking interface
@@ -29,6 +31,7 @@ fan-vote-app/
 │   ├── hooks/
 │   │   └── useContest.js        # Custom hook for Firestore contest data
 │   ├── services/
+│   │   ├── admin.js             # Admin service (auth check, results queries)
 │   │   └── ggwave.js            # Audio-based attendance verification
 │   ├── App.jsx                  # Main app with tabs and auth
 │   ├── App.css
@@ -72,7 +75,54 @@ FANVOTE:1:AUTH:1703548800
 - `src/services/ggwave.js` - Audio capture, decoding, and validation
 - `src/components/MyRankings.jsx` - UI integration
 
+### Admin Scores Page
+
+The admin page displays pre-calculated Modified Borda Count results. Access is restricted to users in the `admins` Firestore collection.
+
+**URL:** `/admin/scores` (hidden, not linked from main app)
+
+**Features:**
+- Contest selector dropdown
+- Results table with Rank, Ensemble, Borda Points, % of Total, GE Score
+- CSV and JSON export options
+- Access control via Firebase Auth + admin whitelist
+
+**Modified Borda Count Algorithm:**
+```
+Points = max_rank - rank + 1
+GE Score = (Ensemble Borda Points / Total Borda Points) × 10.0
+```
+
+Example with 3 ensembles:
+- Rank 1 = 3 points, Rank 2 = 2 points, Rank 3 = 1 point
+- GE scores always sum to 10.0
+
+**Key files:**
+- `src/services/admin.js` - Admin status check, results queries, export functions
+- `src/components/AdminScores.jsx` - Admin page UI
+
 ### Contest Data Model (Firestore)
+
+**Collection: `admins`** (for admin access control)
+```json
+{
+  "role": "admin"
+}
+```
+Document ID = Firebase user UID
+
+**Collection: `results`** (pre-calculated scores)
+```json
+{
+  "contest_id": 1,
+  "total_borda_points": 30,
+  "borda_count_scores": { "9": 14, "39": 10, "24": 6 },
+  "general_effect_scores": { "9": 4.67, "39": 3.33, "24": 2.00 },
+  "calculated_at": "2025-11-27T20:00:00.000Z",
+  "vote_count": 5
+}
+```
+Document ID = `contest_{id}_borda`
 
 **Collection: `contests`**
 ```json
@@ -245,6 +295,19 @@ npx cap sync android
 npx cap open android  # Opens Android Studio
 ```
 
+### Add an admin user
+1. Get the user's Firebase UID (shown in app footer during development)
+2. In Firebase Console → Firestore → Create document in `admins` collection
+3. Document ID = user's UID
+4. Add field: `role` = `"admin"`
+5. User can now access `/admin/scores`
+
+### View calculated scores
+1. Ensure results exist in `results/contest_{id}_borda` collection
+2. Navigate to `/admin/scores` (logged in as admin user)
+3. Select contest from dropdown
+4. Export as CSV or JSON as needed
+
 ## Security Considerations
 
 - Firebase API keys in `src/firebase.js` are client-side keys (safe to expose)
@@ -252,3 +315,10 @@ npx cap open android  # Opens Android Studio
 - Anonymous users can only write to `rankings` collection, not modify `contests`
 - Authentication codes expire after 5 minutes to prevent replay attacks
 - Audio authentication requires physical presence at the venue (can hear the PA)
+- Admin access is controlled via `admins` collection - add Firestore rules to restrict read access:
+  ```javascript
+  match /results/{document} {
+    allow read: if request.auth != null &&
+                exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+  }
+  ```

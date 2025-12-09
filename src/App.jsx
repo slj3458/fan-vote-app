@@ -6,6 +6,7 @@ import { useContest } from './hooks/useContest';
 import { connectMQTT, disconnectMQTT, isContestConcluded } from './mqtt';
 import ContestLineup from './components/ContestLineup';
 import MyRankings from './components/MyRankings';
+import AdminScores from './components/AdminScores';
 import './App.css';
 
 function App() {
@@ -95,6 +96,14 @@ function App() {
       alert('Failed to submit rankings. Please try again.');
     }
   };
+
+  // Check if we're on the admin route
+  const isAdminRoute = window.location.pathname === '/admin/scores';
+
+  // Render admin page if on admin route
+  if (isAdminRoute) {
+    return <AdminScores user={user} />;
+  }
 
   if (loading) {
     return (
