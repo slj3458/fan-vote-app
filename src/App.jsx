@@ -4,9 +4,10 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { db, auth, signInAnonymous } from './firebase';
 import { useContest } from './hooks/useContest';
 import { connectMQTT, disconnectMQTT, isContestConcluded } from './mqtt';
+import { calculateAndSaveResults, getContestResults } from './services/results';
 import ContestLineup from './components/ContestLineup';
 import MyRankings from './components/MyRankings';
-import AdminScores from './components/AdminScores';
+import ResultsTab from './components/ResultsTab';
 import './App.css';
 
 function App() {
@@ -16,6 +17,8 @@ function App() {
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [mqttConnected, setMqttConnected] = useState(false);
   const [error, setError] = useState(null);
+  const [results, setResults] = useState(null);
+  const [resultsAvailable, setResultsAvailable] = useState(false);
 
   // Contest ID - matches Firestore document ID
   const contestId = 1;
@@ -72,6 +75,35 @@ function App() {
     };
   }, []);
 
+  // Calculate results when contest concludes
+  useEffect(() => {
+    const calculateResults = async () => {
+      if (!contestConcluded || !contest) return;
+
+      try {
+        // First check if results already exist
+        let contestResults = await getContestResults(contest.id_contest);
+
+        if (!contestResults) {
+          // Calculate and save results
+          const maxRank = contest.lineup?.length || 0;
+          if (maxRank > 0) {
+            contestResults = await calculateAndSaveResults(contest.id_contest, maxRank);
+          }
+        }
+
+        if (contestResults) {
+          setResults(contestResults);
+          setResultsAvailable(true);
+        }
+      } catch (err) {
+        console.error('Error calculating results:', err);
+      }
+    };
+
+    calculateResults();
+  }, [contestConcluded, contest]);
+
   // Handle rankings submission
   const handleSubmitRankings = async (rankings) => {
     if (!user || !contest) {
@@ -97,14 +129,6 @@ function App() {
     }
   };
 
-  // Check if we're on the admin route
-  const isAdminRoute = window.location.pathname === '/admin/scores';
-
-  // Render admin page if on admin route
-  if (isAdminRoute) {
-    return <AdminScores user={user} />;
-  }
-
   if (loading) {
     return (
       <div className="app">
@@ -124,7 +148,7 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>🎵 Fan Vote</h1>
+        <h1>Fan Vote</h1>
       </header>
 
       <div className="tabs">
@@ -140,18 +164,30 @@ function App() {
         >
           My Rankings
         </button>
+        {resultsAvailable && (
+          <button
+            className={`tab ${activeTab === 'results' ? 'active' : ''}`}
+            onClick={() => setActiveTab('results')}
+          >
+            Results
+          </button>
+        )}
       </div>
 
       <main className="app-content">
-        {activeTab === 'lineup' ? (
+        {activeTab === 'lineup' && (
           <ContestLineup contest={contest} />
-        ) : (
+        )}
+        {activeTab === 'rankings' && (
           <MyRankings
             contest={contest}
             onSubmitRankings={handleSubmitRankings}
             contestConcluded={contestConcluded}
             hasSubmitted={hasSubmitted}
           />
+        )}
+        {activeTab === 'results' && resultsAvailable && (
+          <ResultsTab results={results} contest={contest} />
         )}
       </main>
 
@@ -160,6 +196,7 @@ function App() {
         <small>
           {user && `User ID: ${user.uid.slice(0, 8)}...`}
           {mqttConnected && ' | MQTT Connected'}
+          {contestConcluded && ' | Contest Concluded'}
         </small>
       </footer>
     </div>
