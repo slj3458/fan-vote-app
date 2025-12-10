@@ -20,19 +20,19 @@ A Progressive Web App (PWA) for live performance ranking at musical ensemble con
 fan-vote-app/
 ├── src/
 │   ├── components/
-│   │   ├── AdminScores.jsx      # Admin page for viewing calculated scores
-│   │   ├── AdminScores.css
 │   │   ├── ContestLineup.jsx    # Displays ensembles in performance order
 │   │   ├── ContestLineup.css
 │   │   ├── MyRankings.jsx       # Drag-and-drop ranking interface
 │   │   ├── MyRankings.css
+│   │   ├── ResultsTab.jsx       # Results display (shown after contest concludes)
+│   │   ├── ResultsTab.css
 │   │   ├── SortableItem.jsx     # Individual draggable ranking item
 │   │   └── SortableItem.css
 │   ├── hooks/
 │   │   └── useContest.js        # Custom hook for Firestore contest data
 │   ├── services/
-│   │   ├── admin.js             # Admin service (auth check, results queries)
-│   │   └── ggwave.js            # Audio-based attendance verification
+│   │   ├── ggwave.js            # Audio-based attendance verification
+│   │   └── results.js           # Borda Count calculation and results queries
 │   ├── App.jsx                  # Main app with tabs and auth
 │   ├── App.css
 │   ├── firebase.js              # Firebase configuration and auth helpers
@@ -58,7 +58,7 @@ The app uses [ggwave](https://github.com/ggerganov/ggwave) data-over-sound techn
 1. User taps "Verify My Attendance"
 2. App requests microphone permission
 3. App listens for authentication signal (30 second timeout)
-4. PA system broadcasts encoded message: `FANVOTE:<contest_id>:AUTH:<timestamp>`
+4. PA system broadcasts encoded message: `FANVOTE:<id_contest>:AUTH:<timestamp>`
 5. App decodes and validates the message
 6. Attendance is verified, enabling ranking submission
 
@@ -67,7 +67,7 @@ The app uses [ggwave](https://github.com/ggerganov/ggwave) data-over-sound techn
 FANVOTE:1:AUTH:1703548800
 ```
 - `FANVOTE` - Protocol prefix
-- `1` - Contest ID
+- `1` - Contest ID (id_contest)
 - `AUTH` - Code type (authentication)
 - `1703548800` - Unix timestamp (must be within 5 minutes)
 
@@ -75,17 +75,21 @@ FANVOTE:1:AUTH:1703548800
 - `src/services/ggwave.js` - Audio capture, decoding, and validation
 - `src/components/MyRankings.jsx` - UI integration
 
-### Admin Scores Page
+### Results Tab
 
-The admin page displays pre-calculated Modified Borda Count results. Access is restricted to users in the `admins` Firestore collection.
+The Results tab displays Modified Borda Count scores after the contest concludes. It is hidden until the contest ends and results are calculated.
 
-**URL:** `/admin/scores` (hidden, not linked from main app)
+**Behavior:**
+- Tab is hidden during the contest
+- When contest concludes (via MQTT), scores are automatically calculated
+- Results are saved to Firestore `results` collection
+- Results tab becomes visible on the far right
+- All users can view results (no admin access required)
 
 **Features:**
-- Contest selector dropdown
-- Results table with Rank, Ensemble, Borda Points, % of Total, GE Score
+- Results table with Rank, Ensemble Name, Borda Points, % of Total, GE Score
 - CSV and JSON export options
-- Access control via Firebase Auth + admin whitelist
+- Ensemble names resolved from contest lineup
 
 **Modified Borda Count Algorithm:**
 ```
@@ -98,31 +102,12 @@ Example with 3 ensembles:
 - GE scores always sum to 10.0
 
 **Key files:**
-- `src/services/admin.js` - Admin status check, results queries, export functions
-- `src/components/AdminScores.jsx` - Admin page UI
+- `src/services/results.js` - Borda calculation, Firestore queries, export functions
+- `src/components/ResultsTab.jsx` - Results display UI
 
 ### Contest Data Model (Firestore)
 
-**Collection: `admins`** (for admin access control)
-```json
-{
-  "role": "admin"
-}
-```
-Document ID = Firebase user UID
-
-**Collection: `results`** (pre-calculated scores)
-```json
-{
-  "contest_id": 1,
-  "total_borda_points": 30,
-  "borda_count_scores": { "9": 14, "39": 10, "24": 6 },
-  "general_effect_scores": { "9": 4.67, "39": 3.33, "24": 2.00 },
-  "calculated_at": "2025-11-27T20:00:00.000Z",
-  "vote_count": 5
-}
-```
-Document ID = `contest_{id}_borda`
+All ID fields follow the `id_****` naming convention.
 
 **Collection: `contests`**
 ```json
@@ -159,6 +144,19 @@ Document ID = `contest_{id}_borda`
 }
 ```
 
+**Collection: `results`** (auto-calculated on contest conclusion)
+```json
+{
+  "id_contest": 1,
+  "total_borda_points": 30,
+  "borda_count_scores": { "9": 14, "39": 10, "24": 6 },
+  "general_effect_scores": { "9": 4.67, "39": 3.33, "24": 2.00 },
+  "calculated_at": "2025-11-27T20:00:00.000Z",
+  "vote_count": 5
+}
+```
+Document ID = `contest_{id_contest}_borda`
+
 ### Application Flow
 
 1. User opens app → Firebase Anonymous Auth signs them in automatically
@@ -170,10 +168,15 @@ Document ID = `contest_{id}_borda`
    - Attendance is verified (via ggwave audio)
    - Contest has concluded (signaled via MQTT)
 7. Rankings are saved to Firestore with user's anonymous UID
+8. When contest concludes:
+   - Results are calculated from all submitted rankings
+   - Results are saved to Firestore `results` collection
+   - **Results tab** becomes visible (far right)
+9. All users can view final results and export them
 
 ### MQTT Integration
 
-MQTT is used to signal when a contest has concluded, enabling the submit button. The message format expected:
+MQTT is used to signal when a contest has concluded, enabling the submit button and triggering results calculation. The message format expected:
 
 ```json
 {
@@ -184,7 +187,7 @@ MQTT is used to signal when a contest has concluded, enabling the submit button.
 }
 ```
 
-MQTT is currently disabled in `App.jsx` (line 67). Uncomment `initMQTT()` to enable.
+MQTT is currently disabled in `App.jsx` (line 71). Uncomment `initMQTT()` to enable.
 
 ## Development Commands
 
@@ -211,11 +214,11 @@ firebase deploy --only hosting
 The Firebase project is `fan-vote-71884`. Configuration is in `src/firebase.js`. Ensure:
 - Firestore Database is enabled
 - Anonymous Authentication is enabled in Firebase Console
-- Firestore security rules allow anonymous users to read contests and write rankings
+- Firestore security rules allow anonymous users to read contests, rankings, results and write rankings
 
 ### Contest ID
 
-The active contest ID is set in `src/App.jsx` line 20:
+The active contest ID is set in `src/App.jsx` line 24:
 ```javascript
 const contestId = 1;
 ```
@@ -235,6 +238,7 @@ const MQTT_CONFIG = {
 
 - **Attendance verification**: For local testing, you can temporarily set `attendanceVerified` to `true` in `MyRankings.jsx`
 - **Contest conclusion**: For local testing without MQTT, manually set `contestConcluded` state to `true` in `App.jsx`
+- **Results tab testing**: Setting `contestConcluded` to `true` will trigger results calculation and show the Results tab
 - **Audio testing**: Use the [ggwave web demo](https://ggwave.ggerganov.com/) to generate test signals
 - Firebase Anonymous Auth works locally but requires proper domain configuration for production
 - PWA features (install prompt, offline support) only work on HTTPS or localhost
@@ -247,7 +251,7 @@ To broadcast authentication codes from the venue PA system:
 1. Use a device/computer connected to the PA audio input
 2. Generate authentication codes using ggwave encode function
 3. Broadcast at the start of the event and periodically throughout
-4. Code format: `FANVOTE:<contest_id>:AUTH:<unix_timestamp>`
+4. Code format: `FANVOTE:<id_contest>:AUTH:<unix_timestamp>`
 
 Example code generation (Node.js):
 ```javascript
@@ -257,9 +261,9 @@ ggwave().then((gw) => {
   const params = gw.getDefaultParameters();
   const instance = gw.init(params);
 
-  const contestId = 1;
+  const id_contest = 1;
   const timestamp = Math.floor(Date.now() / 1000);
-  const message = `FANVOTE:${contestId}:AUTH:${timestamp}`;
+  const message = `FANVOTE:${id_contest}:AUTH:${timestamp}`;
 
   // Generate waveform (audible protocol, volume 10)
   const waveform = gw.encode(instance, message, gw.TxProtocolId.GGWAVE_TX_PROTOCOL_AUDIBLE_FAST, 10);
@@ -295,18 +299,12 @@ npx cap sync android
 npx cap open android  # Opens Android Studio
 ```
 
-### Add an admin user
-1. Get the user's Firebase UID (shown in app footer during development)
-2. In Firebase Console → Firestore → Create document in `admins` collection
-3. Document ID = user's UID
-4. Add field: `role` = `"admin"`
-5. User can now access `/admin/scores`
+### Modify results calculation
+- Edit `calculateBordaCount` function in `src/services/results.js`
 
-### View calculated scores
-1. Ensure results exist in `results/contest_{id}_borda` collection
-2. Navigate to `/admin/scores` (logged in as admin user)
-3. Select contest from dropdown
-4. Export as CSV or JSON as needed
+### Force results recalculation
+1. Delete the existing results document from `results/contest_{id}_borda` in Firestore
+2. Trigger contest conclusion again (or set `contestConcluded` to `true` in dev)
 
 ## Security Considerations
 
@@ -315,10 +313,4 @@ npx cap open android  # Opens Android Studio
 - Anonymous users can only write to `rankings` collection, not modify `contests`
 - Authentication codes expire after 5 minutes to prevent replay attacks
 - Audio authentication requires physical presence at the venue (can hear the PA)
-- Admin access is controlled via `admins` collection - add Firestore rules to restrict read access:
-  ```javascript
-  match /results/{document} {
-    allow read: if request.auth != null &&
-                exists(/databases/$(database)/documents/admins/$(request.auth.uid));
-  }
-  ```
+- Results are publicly readable after contest conclusion (no admin restriction)
